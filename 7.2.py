@@ -1,76 +1,76 @@
 import speech_recognition as sr
 import RPi.GPIO as GPIO
-from gtts import gTTS
-import os
 import time
-import tkinter as tk
-from tkinter import Label
 
-# Set up GPIO
-GPIO.setmode(GPIO.BCM)
-LIGHT_PIN = 18
-GPIO.setup(LIGHT_PIN, GPIO.OUT)
+# Setup for GPIO and LED control
+LED_PIN = 18  # Replace with your LED-connected GPIO pin
+GPIO.setmode(GPIO.BCM)  # Set the GPIO mode to BCM
+GPIO.setup(LED_PIN, GPIO.OUT)  # Set the LED pin as output
 
-# Initialize GUI window
-root = tk.Tk()
-root.title("Smart Light Controller")
-root.geometry("400x300")
+def turn_led_on():
+  
+    GPIO.output(LED_PIN, GPIO.HIGH)  # Set the GPIO pin HIGH to turn the LED on
+    print("LED is now ON.")
+    time.sleep(0.5)  # Debounce time to avoid multiple triggers
 
-# Light status label
-light_status_label = Label(root, text="Light is OFF", font=("Helvetica", 16))
-light_status_label.pack(pady=20)
+def turn_led_off():
+    """Turn the LED OFF."""
+    GPIO.output(LED_PIN, GPIO.LOW)  # Set the GPIO pin LOW to turn the LED off
+    print("LED is now OFF.")
+    time.sleep(0.5)  # Debounce time to avoid multiple triggers
 
-def speak(text):
-    tts = gTTS(text=text, lang='en')
-    filename = "voice.mp3"
-    tts.save(filename)
-    os.system(f"mpg321 {filename}")
+def listen_for_voice_command():
+   
+    recognizer = sr.Recognizer()  # Initialize the speech recognizer
+    microphone = sr.Microphone()  # Initialize the microphone for input
 
-def listen():
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        print("Please say 'ON' or 'OFF'")
-        audio = recognizer.listen(source)
-        try:
-            command = recognizer.recognize_google(audio).upper()
-            print(f"You said: {command}")
-            return command
-        except sr.UnknownValueError:
-            print("Sorry, I did not understand that.")
-            return None
-        except sr.RequestError:
-            print("Could not request results from Google Speech Recognition service.")
-            return None
+    try:
+        with microphone as source:
+            print("Adjusting for background noise... Please wait.")
+            recognizer.adjust_for_ambient_noise(source)  # Adjust for background noise
+            print("Listening for a voice command...")
+            audio_input = recognizer.listen(source)  # Capture audio input
 
-def update_light_status():
-    """Function to update the light status label based on GPIO state."""
-    if GPIO.input(LIGHT_PIN):
-        light_status_label.config(text="Light is ON")
+            # Recognize speech using Google Speech Recognition and convert to lowercase
+            voice_command = recognizer.recognize_google(audio_input).lower()
+            print(f"Voice command received: {voice_command}")
+            return voice_command
+
+    except sr.UnknownValueError:
+        # Handle case where the audio is unintelligible
+        print("Sorry, I could not understand the audio.")
+    except sr.RequestError:
+        # Handle case where the Google API request fails
+        print("Could not request results from the speech recognition service.")
+    return ""  # Return an empty string if recognition fails
+
+def handle_command(command):
+    
+    print(f"Processing command: {command}")
+
+    if "light on" in command or "turn on" in command:
+        print("Command recognized: Turn LED ON")
+        turn_led_on()  # Call the function to turn the LED on
+    elif "light off" in command or "turn off" in command:
+        print("Command recognized: Turn LED OFF")
+        turn_led_off()  # Call the function to turn the LED off
     else:
-        light_status_label.config(text="Light is OFF")
+        # Handle unrecognized commands
+        print("Command not recognized. Please say 'light on' or 'light off'.")
 
-def start_voice_command():
-    """Triggered when 'Voice Command' button is clicked."""
-    command = listen()
-    if command == "ON":
-        GPIO.output(LIGHT_PIN, GPIO.HIGH)
-        speak("Light turned ON")
-        light_status_label.config(text="Light is ON")
-    elif command == "OFF":
-        GPIO.output(LIGHT_PIN, GPIO.LOW)
-        speak("Light turned OFF")
-        light_status_label.config(text="Light is OFF")
+if __name__ == "__main__":
+    try:
+        # Continuous loop to listen for voice commands
+        while True:
+            voice_command = listen_for_voice_command()  # Listen for a voice command
+            if voice_command:  # If a valid command is detected, process it
+                handle_command(voice_command)
+            time.sleep(1)  # Sleep briefly between commands
 
-# Button to start voice command
-voice_button = tk.Button(root, text="Voice Command", command=start_voice_command, font=("Helvetica", 14), width=15)
-voice_button.pack(pady=20)
+    except KeyboardInterrupt:
+        # Handle program exit gracefully when interrupted (Ctrl + C)
+        print("Exiting program...")
 
-# Exit button
-exit_button = tk.Button(root, text="Exit", command=root.quit, font=("Helvetica", 14), width=10)
-exit_button.pack(pady=20)
-
-# Start the GUI loop
-root.mainloop()
-
-# Cleanup GPIO when exiting
-GPIO.cleanup()
+    finally:
+        # Cleanup GPIO resources when the program terminates
+        GPIO.cleanup()
